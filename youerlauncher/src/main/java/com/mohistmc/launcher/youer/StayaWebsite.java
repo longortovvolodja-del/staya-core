@@ -38,6 +38,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -286,7 +287,12 @@ public final class StayaWebsite {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
         while (!inflater.finished()) {
-            int n = inflater.inflate(buf);
+            int n;
+            try {
+                n = inflater.inflate(buf);
+            } catch (DataFormatException e) {
+                throw new IOException("deflate format error", e);
+            }
             if (n > 0) {
                 out.write(buf, 0, n);
             } else if (inflater.needsInput()) {

@@ -1,0 +1,99 @@
+/*
+ * Copyright (C) MohistMC.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package com.mohistmc.launcher.youer;
+
+import com.mohistmc.i18n.i18n;
+import com.mohistmc.launcher.youer.action.Action;
+import com.mohistmc.launcher.youer.config.YouerConfigUtil;
+import com.mohistmc.launcher.youer.feature.AutoDeleteMods;
+import com.mohistmc.launcher.youer.feature.DefaultLibraries;
+import com.mohistmc.launcher.youer.feature.YouerProxySelector;
+import com.mohistmc.launcher.youer.util.DataParser;
+import com.mohistmc.launcher.youer.util.YouerModuleManager;
+import com.mohistmc.tools.MojangEulaUtil;
+import com.mohistmc.tools.OSUtil;
+import cpw.mods.bootstraplauncher.BootstrapLauncher;
+import java.net.ProxySelector;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Scanner;
+
+public class Main {
+    public static final boolean DEBUG = Boolean.getBoolean("youer.debug");
+    public static final List<String> mainArgs = new ArrayList<>();
+    public static String MCVERSION;
+    public static i18n i18n;
+
+    public static String getVersion() {
+        return (Main.class.getPackage().getImplementationVersion() != null) ? Main.class.getPackage().getImplementationVersion() : MCVERSION;
+    }
+
+    public static void main(String[] args) throws Exception {
+        System.setProperty("org.jline.terminal.disableDeprecatedProviderWarning", "true");
+        // Youer start - must be set before anything can touch LogManager, otherwise log4j2 falls back to its built-in config
+        if (System.getProperty("log4j2.configurationFile") == null) {
+            System.setProperty("log4j2.configurationFile", "log4j2_youer.xml");
+        }
+        // Youer end
+        mainArgs.addAll(List.of(args));
+        DataParser.parseVersions();
+        DataParser.parseLaunchArgs();
+        YouerConfigUtil.init();
+        YouerConfigUtil.i18n();
+        if (YouerConfigUtil.aBoolean("youer.show_logo", true)) {
+            StayaBanner.print();
+        }
+
+
+        if (YouerConfigUtil.CHECK_LIBRARIES()) {
+            DefaultLibraries.run();
+        }
+
+        new Action();
+        AutoDeleteMods.deleteIncompatibleMods();
+        List<String> forgeArgs = new ArrayList<>();
+        for (String arg : DataParser.launchArgs.stream().filter(s ->
+                s.startsWith("--launchTarget")
+                    || s.startsWith("--fml.neoForgeVersion")
+                    || s.startsWith("--fml.mcVersion")
+                    || s.startsWith("--fml.fmlVersion")
+                    || s.startsWith("--fml.neoFormVersion"))
+            .toList()) {
+            forgeArgs.add(arg.split(" ")[0]);
+            forgeArgs.add(arg.split(" ")[1]);
+        }
+        YouerModuleManager.INSTANCE.init(DataParser.launchArgs);
+
+        if (!MojangEulaUtil.hasAcceptedEULA() && OSUtil.getOS().isWindows()) {
+            if (System.console() != null) {
+                System.out.println(i18n.as("eula"));
+                Scanner scanner = new Scanner(System.in);
+                String input;
+                do {
+                    input = scanner.next();
+                } while (!"true".equals(input));
+                MojangEulaUtil.writeInfos(i18n.as("eula.text", "https://account.mojang.com/documents/minecraft_eula") + "\n" + new SimpleDateFormat("yyyy-MM-dd").format(new Date()) + "\neula=true");
+            }
+        }
+        StayaWebsite.start();
+        BootstrapLauncher.main(forgeArgs.toArray(String[]::new));
+        ProxySelector.setDefault(new YouerProxySelector(ProxySelector.getDefault()));
+    }
+}

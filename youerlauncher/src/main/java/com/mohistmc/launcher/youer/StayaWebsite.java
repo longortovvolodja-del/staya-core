@@ -104,7 +104,7 @@ public final class StayaWebsite {
         try {
             String content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
             StringBuilder missing = null;
-            for (String line : new String[] {"staya-website-enabled=false", "staya-website-port=8080", ADDRESS_KEY + "="}) {
+            for (String line : new String[] {"staya-website-enabled=false", "staya-website-port=8080", ADDRESS_KEY + "=", "staya-mod-guard-enabled=true"}) {
                 if (!content.contains(line.substring(0, line.indexOf('=')))) {
                     if (missing == null) {
                         missing = new StringBuilder(content.isEmpty() || content.endsWith("\n") ? "" : "\n");
@@ -226,6 +226,14 @@ public final class StayaWebsite {
         File[] found = modsDir.listFiles();
         if (found != null) {
             for (File f : Arrays.asList(found)) {
+                if (f.isFile()) {
+                    files.add(f);
+                }
+            }
+        }
+        File[] disabled = new File(modsDir, "staya-disabled").listFiles();
+        if (disabled != null) {
+            for (File f : Arrays.asList(disabled)) {
                 if (f.isFile()) {
                     files.add(f);
                 }

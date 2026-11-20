@@ -20,7 +20,6 @@ package com.mohistmc.launcher.youer;
 import com.mohistmc.i18n.i18n;
 import com.mohistmc.launcher.youer.action.Action;
 import com.mohistmc.launcher.youer.config.YouerConfigUtil;
-import com.mohistmc.launcher.youer.feature.AutoDeleteMods;
 import com.mohistmc.launcher.youer.feature.DefaultLibraries;
 import com.mohistmc.launcher.youer.feature.YouerProxySelector;
 import com.mohistmc.launcher.youer.util.DataParser;
@@ -67,7 +66,7 @@ public class Main {
         }
 
         new Action();
-        AutoDeleteMods.deleteIncompatibleMods();
+        StayaModGuard.run();
         List<String> forgeArgs = new ArrayList<>();
         for (String arg : DataParser.launchArgs.stream().filter(s ->
                 s.startsWith("--launchTarget")

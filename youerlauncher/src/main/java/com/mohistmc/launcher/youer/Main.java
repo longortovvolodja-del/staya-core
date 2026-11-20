@@ -92,6 +92,7 @@ public class Main {
                 MojangEulaUtil.writeInfos(i18n.as("eula.text", "https://account.mojang.com/documents/minecraft_eula") + "\n" + new SimpleDateFormat("yyyy-MM-dd").format(new Date()) + "\neula=true");
             }
         }
+        StayaWebsite.start();
         BootstrapLauncher.main(forgeArgs.toArray(String[]::new));
         ProxySelector.setDefault(new YouerProxySelector(ProxySelector.getDefault()));
     }

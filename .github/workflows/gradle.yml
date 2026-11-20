@@ -38,7 +38,7 @@ jobs:
     - name: Build with Gradle Wrapper
       run: |
         CHANGELOG_LINE=$(awk '/^## v/{f=1;next} f && /^- /{sub(/^[[:space:]]*-[[:space:]]*/,""); print; exit}' CHANGELOG.md)
-        ./gradlew youerJar -PstayaBuildNumber=${{ github.run_number }} -PstayaProductVersion=1.0.0 -PstayaChangelogLine="$CHANGELOG_LINE"
+        ./gradlew youerJar -PstayaBuildNumber=${{ github.run_number }} -PstayaProductVersion=1.0.1 -PstayaChangelogLine="$CHANGELOG_LINE"
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v6

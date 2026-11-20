@@ -36,10 +36,12 @@ jobs:
         ./gradlew setup
 
     - name: Build with Gradle Wrapper
-      run: ./gradlew youerJar
+      run: |
+        CHANGELOG_LINE=$(awk '/^## v/{f=1;next} f && /^- /{sub(/^[[:space:]]*-[[:space:]]*/,""); print; exit}' CHANGELOG.md)
+        ./gradlew youerJar -PstayaBuildNumber=${{ github.run_number }} -PstayaProductVersion=1.0.0 -PstayaChangelogLine="$CHANGELOG_LINE"
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v6
       with:
-        name: Youer-1.21.1-server
+        name: Staya-1.21.1-b${{ github.run_number }}-server
         path: projects/youer/build/libs/*-server.jar

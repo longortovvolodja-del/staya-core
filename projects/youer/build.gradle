@@ -458,11 +458,26 @@ def installerDeps = {
 
 dependencies installerDeps
 
-task youerJar(type: Jar, dependsOn: [youerJar0, assembleInstallLibraries, project(':youerlauncher').tasks.jar]) {
+tasks.register('stayaBuildInfo') {
+    def outFile = layout.buildDirectory.file('generated/staya/staya-build.properties')
+    outputs.file(outFile)
+    def buildNumber = (project.findProperty('stayaBuildNumber') ?: '0').toString()
+    def productVersion = (project.findProperty('stayaProductVersion') ?: '1.0.0').toString()
+    def changelogLine = (project.findProperty('stayaChangelogLine') ?: '').toString()
+    doLast {
+        def f = outFile.get().asFile
+        f.parentFile.mkdirs()
+        f.text = 'staya.product.version=' + productVersion +
+                '\nstaya.build.number=' + buildNumber +
+                '\nstaya.changelog.line=' + changelogLine + '\n'
+    }
+}
+
+task youerJar(type: Jar, dependsOn: [youerJar0, assembleInstallLibraries, project(':youerlauncher').tasks.jar, stayaBuildInfo]) {
     archiveClassifier = 'server'
     archiveExtension = 'jar'
-    archiveBaseName = 'youer'
-    archiveVersion = '1.21.1-' + gradleutils.gitInfo.abbreviatedId
+    archiveBaseName = 'staya'
+    archiveVersion = '1.21.1-b' + (findProperty('stayaBuildNumber') ?: '0')
     destinationDirectory = file('build/libs')
 
     manifest {
@@ -472,9 +487,9 @@ task youerJar(type: Jar, dependsOn: [youerJar0, assembleInstallLibraries, projec
                 'Main-Class': 'com.mohistmc.launcher.youer.Main'
         ])
         attributes([
-                'Specification-Title'   : 'Youer',
+                'Specification-Title'   : 'Staya',
                 'Specification-Vendor'  : 'MohistMC',
-                'Implementation-Title'  : 'Youer',
+                'Implementation-Title'  : 'Staya',
                 'Implementation-Version': archiveVersion,
                 'Implementation-Vendor' : 'MohistMC'
         ] as LinkedHashMap, 'com/mohistmc/launcher/youer/')
@@ -532,6 +547,9 @@ task youerJar(type: Jar, dependsOn: [youerJar0, assembleInstallLibraries, projec
     from(rootProject.file('server_files/version.txt')) {
         filter(ReplaceTokens, tokens: [VERSION: minecraft_version + '-' + neoform_version])
         rename { 'versions/mcp.txt' }
+    }
+    from(layout.buildDirectory.dir('generated/staya')) {
+        into 'staya'
     }
 }
 

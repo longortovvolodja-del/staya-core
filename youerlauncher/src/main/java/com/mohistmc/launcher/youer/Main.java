@@ -25,11 +25,9 @@ import com.mohistmc.launcher.youer.feature.DefaultLibraries;
 import com.mohistmc.launcher.youer.feature.YouerProxySelector;
 import com.mohistmc.launcher.youer.util.DataParser;
 import com.mohistmc.launcher.youer.util.YouerModuleManager;
-import com.mohistmc.tools.Logo;
 import com.mohistmc.tools.MojangEulaUtil;
 import com.mohistmc.tools.OSUtil;
 import cpw.mods.bootstraplauncher.BootstrapLauncher;
-import java.lang.management.ManagementFactory;
 import java.net.ProxySelector;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -60,20 +58,7 @@ public class Main {
         YouerConfigUtil.init();
         YouerConfigUtil.i18n();
         if (YouerConfigUtil.aBoolean("youer.show_logo", true)) {
-            System.out.printf("%n%s%n%s - %s, Java(%s) %s PID: %s%n",
-                Logo.asYouer(),
-                i18n.as("youer.launch.welcomemessage"),
-                getVersion(),
-                System.getProperty("java.class.version"),
-                System.getProperty("java.version"),
-                ManagementFactory.getRuntimeMXBean().getName().split("@")[0]
-            );
-            System.out.println("+------------------------------------------------------+");
-            System.out.println("|                                                      |");
-            System.out.println("| Patreon: https://www.patreon.com/c/mohistmc          |");
-            System.out.println("| 爱发电: https://ifdian.net/a/MohistMC                |");
-            System.out.println("|                                                      |");
-            System.out.println("+------------------------------------------------------+");
+            StayaBanner.print();
         }
 
 

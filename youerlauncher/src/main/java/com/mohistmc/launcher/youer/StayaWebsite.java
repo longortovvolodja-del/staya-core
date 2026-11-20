@@ -19,7 +19,6 @@ package com.mohistmc.launcher.youer;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -29,6 +28,8 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -38,8 +39,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.zip.DataFormatException;
-import java.util.zip.Inflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -48,7 +47,10 @@ import java.util.zip.ZipOutputStream;
  * <p>
  * Serves exactly two things on its own port: the public page at / and the mods
  * archive at /mods.zip. Enabled via server.properties:
- * staya-website-enabled=true (default false), staya-website-port (default 8080).
+ * staya-website-enabled=true (default false), staya-website-port (default 8080),
+ * staya-site-address (default empty, the public site address shown in the
+ * console and on the page). All three keys are auto-appended to
+ * server.properties on startup if missing, so the owner can fill them in.
  * Player count and status come from a Minecraft protocol ping to
  * 127.0.0.1:server-port, so the page shows "запускается" while the server is
  * still booting.
@@ -56,6 +58,7 @@ import java.util.zip.ZipOutputStream;
 public final class StayaWebsite {
 
     private static final int PROTOCOL_1_21_1 = 767;
+    private static final String ADDRESS_KEY = "staya-site-address";
     private static final Pattern P_ONLINE = Pattern.compile("\"online\"\\s*:\\s*(\\d+)");
     private static final Pattern P_MAX = Pattern.compile("\"max\"\\s*:\\s*(\\d+)");
     private static final Pattern P_VERSION = Pattern.compile("\"name\"\\s*:\\s*\"([^\"]+)\"");
@@ -75,6 +78,7 @@ public final class StayaWebsite {
                 // unreadable -> defaults
             }
         }
+        ensureStayaKeys(file);
         if (!Boolean.parseBoolean(props.getProperty("staya-website-enabled", "false"))) {
             return;
         }
@@ -85,10 +89,68 @@ public final class StayaWebsite {
             server.createContext("/", StayaWebsite::handle);
             server.setExecutor(daemonPool());
             server.start();
-            System.out.println("[StayaWebsite] сайт включён: http://<адрес-сервера>:" + port + "/ (моды: /mods.zip)");
+            System.out.println("[StayaWebsite] сайт включён: " + siteUrl(readSiteAddress(), port)
+                + "/ (моды: /mods.zip)");
         } catch (IOException e) {
             System.err.println("[StayaWebsite] не удалось занять порт " + port + ": " + e.getMessage());
         }
+    }
+
+    /** Appends the staya-website-* keys to server.properties if missing. */
+    private static void ensureStayaKeys(File file) {
+        if (!file.isFile()) {
+            return;
+        }
+        try {
+            String content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+            StringBuilder missing = null;
+            for (String line : new String[] {"staya-website-enabled=false", "staya-website-port=8080", ADDRESS_KEY + "="}) {
+                if (!content.contains(line.substring(0, line.indexOf('=')))) {
+                    if (missing == null) {
+                        missing = new StringBuilder(content.isEmpty() || content.endsWith("\n") ? "" : "\n");
+                    }
+                    missing.append(line).append("\n");
+                }
+            }
+            if (missing != null) {
+                Files.writeString(file.toPath(), missing.toString(), StandardCharsets.UTF_8,
+                    StandardOpenOption.APPEND);
+            }
+        } catch (IOException e) {
+            // best effort: the owner can add the keys by hand
+        }
+    }
+
+    private static String readSiteAddress() {
+        File file = new File("server.properties");
+        if (!file.isFile()) {
+            return "";
+        }
+        Properties props = new Properties();
+        try (InputStream in = new FileInputStream(file)) {
+            props.load(in);
+        } catch (IOException e) {
+            return "";
+        }
+        String a = props.getProperty(ADDRESS_KEY, "");
+        return a == null ? "" : a.trim();
+    }
+
+    private static String siteUrl(String address, int port) {
+        if (address.isEmpty()) {
+            return "http://<адрес-сервера>:" + port;
+        }
+        if (address.startsWith("http://") || address.startsWith("https://")) {
+            return address;
+        }
+        if (address.contains(":")) {
+            return "http://" + address;
+        }
+        return "http://" + address + ":" + port;
+    }
+
+    private static String htmlEscape(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     private static int parseInt(String s, int fallback) {
@@ -146,10 +208,15 @@ public final class StayaWebsite {
         String mc = (Main.MCVERSION != null && !Main.MCVERSION.isEmpty())
             ? Main.MCVERSION
             : (status.online() && !status.mcVersion().isEmpty() ? status.mcVersion() : "—");
+        String address = readSiteAddress();
+        String addrHtml = address.isEmpty()
+            ? "<b class=\"empty\">— пока пусто</b>"
+            : "<b>" + htmlEscape(address) + "</b>";
         String html = PAGE_TEMPLATE
             .replace("__STATUS__", statusHtml)
             .replace("__CORE__", core)
-            .replace("__MC__", mc);
+            .replace("__MC__", mc)
+            .replace("__ADDR__", addrHtml);
         send(ex, 200, "text/html; charset=utf-8", html.getBytes(StandardCharsets.UTF_8));
     }
 
@@ -164,11 +231,8 @@ public final class StayaWebsite {
                 }
             }
         }
-        ex.getResponseHeaders().set("Content-Type", "application/zip");
-        ex.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"staya-mods.zip\"");
-        ex.sendResponseHeaders(200, -1);
-        try (OutputStream raw = ex.getResponseBody();
-             ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(raw))) {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bos)) {
             for (File f : files) {
                 zip.putNextEntry(new ZipEntry(f.getName()));
                 try (FileInputStream in = new FileInputStream(f)) {
@@ -181,6 +245,13 @@ public final class StayaWebsite {
                 zip.write("Папка mods/ пуста".getBytes(StandardCharsets.UTF_8));
                 zip.closeEntry();
             }
+        }
+        byte[] zipBytes = bos.toByteArray();
+        ex.getResponseHeaders().set("Content-Type", "application/zip");
+        ex.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"staya-mods.zip\"");
+        ex.sendResponseHeaders(200, zipBytes.length);
+        try (OutputStream raw = ex.getResponseBody()) {
+            raw.write(zipBytes);
         }
     }
 
@@ -197,6 +268,7 @@ public final class StayaWebsite {
             OutputStream out = socket.getOutputStream();
             out.write(handshake(mcPort));
             out.write(0x01);
+            out.write(0x00);
             out.flush();
             return parseJson(readStatusJson(socket.getInputStream()));
         } catch (Exception e) {
@@ -206,10 +278,8 @@ public final class StayaWebsite {
 
     private static byte[] handshake(int port) {
         ByteArrayOutputStream payload = new ByteArrayOutputStream();
-        payload.write((PROTOCOL_1_21_1 >>> 24) & 0xFF);
-        payload.write((PROTOCOL_1_21_1 >>> 16) & 0xFF);
-        payload.write((PROTOCOL_1_21_1 >>> 8) & 0xFF);
-        payload.write(PROTOCOL_1_21_1 & 0xFF);
+        payload.write(0x00);
+        writeVarInt(payload, PROTOCOL_1_21_1);
         byte[] host = "127.0.0.1".getBytes(StandardCharsets.UTF_8);
         writeVarInt(payload, host.length);
         for (byte b : host) {
@@ -219,7 +289,6 @@ public final class StayaWebsite {
         payload.write(port & 0xFF);
         writeVarInt(payload, 1);
         ByteArrayOutputStream packet = new ByteArrayOutputStream();
-        packet.write(0x00);
         writeVarInt(packet, payload.size());
         packet.write(payload.toByteArray(), 0, payload.size());
         return packet.toByteArray();
@@ -235,32 +304,21 @@ public final class StayaWebsite {
 
     private static String readStatusJson(InputStream in) throws IOException {
         StreamReader r = new StreamReader(in);
-        int threshold = r.readVarInt();
-        if (threshold >= 0) {
-            int dataLen = r.readVarInt();
-            if (dataLen == 0) {
-                return "";
-            }
-            byte[] deflated = new byte[dataLen];
-            r.readFully(deflated);
-            byte[] packet = inflate(deflated);
-            if (packet.length == 0 || packet[0] != 0x00) {
-                return "";
-            }
-            int[] pos = {1};
-            int len = readVarInt(packet, pos);
-            if (pos[0] + len > packet.length) {
-                return "";
-            }
-            return new String(packet, pos[0], len, StandardCharsets.UTF_8);
-        }
-        if (r.read() != 0x00) {
+        int packetLen = r.readVarInt();
+        if (packetLen <= 0 || packetLen > 65536) {
             return "";
         }
-        int len = r.readVarInt();
-        byte[] json = new byte[len];
-        r.readFully(json);
-        return new String(json, StandardCharsets.UTF_8);
+        byte[] packet = new byte[packetLen];
+        r.readFully(packet);
+        if (packet[0] != 0x00) {
+            return "";
+        }
+        int[] pos = {1};
+        int len = readVarInt(packet, pos);
+        if (pos[0] + len > packet.length) {
+            return "";
+        }
+        return new String(packet, pos[0], len, StandardCharsets.UTF_8);
     }
 
     private static int readVarInt(byte[] data, int[] pos) throws IOException {
@@ -279,28 +337,6 @@ public final class StayaWebsite {
                 throw new IOException("varint too long");
             }
         }
-    }
-
-    private static byte[] inflate(byte[] data) throws IOException {
-        Inflater inflater = new Inflater();
-        inflater.setInput(data);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        while (!inflater.finished()) {
-            int n;
-            try {
-                n = inflater.inflate(buf);
-            } catch (DataFormatException e) {
-                throw new IOException("deflate format error", e);
-            }
-            if (n > 0) {
-                out.write(buf, 0, n);
-            } else if (inflater.needsInput()) {
-                break;
-            }
-        }
-        inflater.end();
-        return out.toByteArray();
     }
 
     private static Status parseJson(String json) {
@@ -415,7 +451,7 @@ public final class StayaWebsite {
             <div class="row"><span>Статус</span><b>__STATUS__</b></div>
             <div class="row"><span>Ядро</span><b>__CORE__</b></div>
             <div class="row"><span>Minecraft</span><b>__MC__</b></div>
-            <div class="row"><span>Адрес</span><b class="empty">— пока пусто</b></div>
+            <div class="row"><span>Адрес</span>__ADDR__</div>
 
             <button id="dl">Скачать моды</button>
             <div class="state" id="state"></div>

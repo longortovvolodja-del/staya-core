@@ -396,7 +396,7 @@ public final class StayaWebsite {
         <body>
           <main class="card">
             <div class="head">
-              <pre class="fox"> /\   /\
+              <pre class="fox"> \\/   \\/
         //\\_//\\
         \\_     _/
          / . . \\
